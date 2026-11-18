@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio</title>
+<style>
+  :root {
+    --bg: #e9eeec;
+    --ink: #123a3b;
+    --muted: #4f6b6a;
+    --panel: #d5dfdc;
+    --live: #c8372d;
+    --btn: #123a3b;
+    --btn-ink: #f4f8f7;
+    --rule: #b9c9c6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10282a;
+      --ink: #e3eeec;
+      --muted: #9db7b4;
+      --panel: #19393b;
+      --live: #ff6b5e;
+      --btn: #e3eeec;
+      --btn-ink: #10282a;
+      --rule: #2c4e50;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
+  h1 { font-size: 2.2rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.35rem; margin: 0 0 .25rem; }
+  .sub { margin: 0 0 1.25rem; color: var(--muted); }
+  section { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--rule); }
+  header + section { border-top: 0; margin-top: 2rem; padding-top: 0; }
+  a { color: var(--ink); }
+
+  /* Live camera */
+  .screen {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: var(--panel);
+    border-radius: 6px;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+  }
+  .screen img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: none;
+  }
+  .screen.on img { display: block; }
+  .status { padding: 1rem; text-align: center; color: var(--muted); max-width: 32ch; }
+  .screen.on .status { display: none; }
+  .badge {
+    position: absolute; top: .75rem; left: .75rem;
+    display: none; align-items: center; gap: .4rem;
+    padding: .2rem .6rem; border-radius: 999px;
+    background: rgba(0,0,0,.55); color: #fff; font-size: .85rem;
+  }
+  .screen.on .badge { display: inline-flex; }
+  .badge i { width: .55rem; height: .55rem; border-radius: 50%; background: var(--live); }
+  .bar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1rem; }
+  button {
+    font: inherit; font-weight: 600;
+    background: var(--btn); color: var(--btn-ink);
+    border: 0; border-radius: 6px;
+    padding: .6rem 1.1rem; cursor: pointer;
+  }
+  button:focus-visible, a:focus-visible { outline: 3px solid var(--live); outline-offset: 2px; }
+  .note { color: var(--muted); font-size: .9rem; }
+
+  /* Documents */
+  #docs { list-style: none; padding: 0; margin: 1rem 0 0; }
+  #docs li { padding: .6rem 0; border-bottom: 1px solid var(--rule); }
+  #docs li:last-child { border-bottom: 0; }
+  .empty { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Portfolio</h1>
+    <p class="sub">Projects, documents, and a live look at what I'm building.</p>
+  </header>
+
+  <section id="camera-section">
+    <h2>Live camera</h2>
+    <p class="sub">Streamed from an ESP32-S3 camera on my home network.</p>
+
+    <div class="screen" id="screen">
+      <img id="cam" alt="Live video from the camera">
+      <span class="badge"><i></i>Live</span>
+      <p class="status" id="status">Press Watch live to connect to the camera.</p>
+    </div>
+
+    <div class="bar">
+      <button id="toggle" type="button">Watch live</button>
+      <span class="note" id="note"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Documents</h2>
+    <ul id="docs"></ul>
+  </section>
+</main>
+
+<script>
+  // =====================  EDIT THESE  =====================
+
+  // Public HTTPS address of your tunnel, ending in /stream
+  // Example: "https://my-pc.tail1234.ts.net/stream"
+  const STREAM_URL = "https://YOUR-TUNNEL-URL/stream";
+
+  // The camera serves one viewer at a time, so the stream
+  // stops by itself after this many minutes.
+  const MAX_MINUTES = 5;
+
+  // Your PDFs. Upload each file to the pdfs folder, then add one line here.
+  const DOCUMENTS = [
+    // { title: "My first project", file: "pdfs/my-first-project.pdf" },
+    // { title: "Second project",   file: "pdfs/second-project.pdf" },
+  ];
+
+  // ========================================================
+
+  // ----- Documents list -----
+  const docsEl = document.getElementById("docs");
+  if (DOCUMENTS.length === 0) {
+    docsEl.innerHTML = '<li class="empty">No documents added yet.</li>';
+  } else {
+    DOCUMENTS.forEach(d => {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = d.file;
+      a.textContent = d.title;
+      li.appendChild(a);
+      docsEl.appendChild(li);
+    });
+  }
+
+  // ----- Live camera -----
+  const screen = document.getElementById("screen");
+  const cam = document.getElementById("cam");
+  const statusEl = document.getElementById("status");
+  const toggle = document.getElementById("toggle");
+  const note = document.getElementById("note");
+
+  let watching = false;
+  let timer = null;
+
+  function showMessage(text) {
+    screen.classList.remove("on");
+    statusEl.textContent = text;
+  }
+
+  function start() {
+    if (STREAM_URL.includes("YOUR-TUNNEL-URL")) {
+      showMessage("Set STREAM_URL at the top of index.html first.");
+      return;
+    }
+    watching = true;
+    toggle.textContent = "Stop";
+    showMessage("Connecting to the camera…");
+    cam.src = STREAM_URL + "?t=" + Date.now();
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      stop("Stopped after " + MAX_MINUTES + " minutes so others can watch. Press Watch live to resume.");
+    }, MAX_MINUTES * 60 * 1000);
+    note.textContent = "Auto-stops after " + MAX_MINUTES + " minutes.";
+  }
+
+  function stop(message) {
+    watching = false;
+    clearTimeout(timer);
+    cam.removeAttribute("src");
+    toggle.textContent = "Watch live";
+    note.textContent = "";
+    showMessage(message || "Stopped. Press Watch live to connect again.");
+  }
+
+  cam.addEventListener("load", () => { if (watching) screen.classList.add("on"); });
+  cam.addEventListener("error", () => {
+    if (!watching) return;
+    stop("The camera is offline or busy with another viewer. Try again in a minute.");
+  });
+  toggle.addEventListener("click", () => (watching ? stop() : start()));
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && watching) {
+      stop("Paused while the tab was hidden. Press Watch live to resume.");
+    }
+  });
+</script>
+</body>
+</html>
